@@ -1,13 +1,22 @@
 {
+  "publisher": "violettape",
   "name": "nmd",
   "displayName": "NMD - Markdown Preview",
   "description": "Live markdown preview with Shiki syntax highlighting",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "nmd.markdownPreview",
+        "displayName": "NMD Markdown Preview",
+        "selector": [{ "filenamePattern": "*.md" }],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
         "command": "nmd.togglePreview",

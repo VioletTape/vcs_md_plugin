@@ -4,8 +4,40 @@ import * as fs from 'fs';
 
 let panel: vscode.WebviewPanel | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+let currentFileDir: string | undefined;
+
+class NmdEditorProvider implements vscode.CustomTextEditorProvider {
+    constructor(private readonly context: vscode.ExtensionContext) {}
+
+    resolveCustomTextEditor(document: vscode.TextDocument, webviewPanel: vscode.WebviewPanel): void {
+        webviewPanel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.file(path.join(this.context.extensionPath, 'media'))],
+        };
+        webviewPanel.webview.html = buildHtml(this.context, webviewPanel.webview);
+
+        const push = () => webviewPanel.webview.postMessage({ type: 'render', content: document.getText() });
+        push();
+
+        const sub = vscode.workspace.onDidChangeTextDocument(e => { if (e.document === document) push(); });
+        webviewPanel.onDidDispose(() => sub.dispose());
+
+        webviewPanel.webview.onDidReceiveMessage(msg => {
+            if (msg.type !== 'openFile') return;
+            const dir = path.dirname(document.uri.fsPath);
+            const resolved = path.isAbsolute(msg.path) ? msg.path : path.resolve(dir, msg.path);
+            vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
+        });
+    }
+}
 
 export function activate(context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+        vscode.window.registerCustomEditorProvider('nmd.markdownPreview', new NmdEditorProvider(context), {
+            webviewOptions: { retainContextWhenHidden: true },
+        })
+    );
+
     context.subscriptions.push(
         vscode.commands.registerCommand('nmd.togglePreview', () => toggle(context))
     );
@@ -20,7 +52,17 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(() => pushContent())
+        vscode.window.onDidChangeActiveTextEditor(editor => { if (editor) pushContent(); })
+    );
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorVisibleRanges(e => {
+            if (!panel || e.textEditor !== vscode.window.activeTextEditor) return;
+            const range = e.visibleRanges[0];
+            if (!range) return;
+            const ratio = range.start.line / Math.max(e.textEditor.document.lineCount - 1, 1);
+            panel.webview.postMessage({ type: 'scroll', ratio });
+        })
     );
 }
 
@@ -41,12 +83,24 @@ function toggle(context: vscode.ExtensionContext) {
     );
     panel.webview.html = buildHtml(context, panel.webview);
     panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
+
+    panel.webview.onDidReceiveMessage(msg => {
+        if (msg.type !== 'openFile' || !currentFileDir) return;
+        const resolved = path.isAbsolute(msg.path)
+            ? msg.path
+            : path.resolve(currentFileDir, msg.path);
+        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
+    }, null, context.subscriptions);
+
     pushContent();
 }
 
 function pushContent() {
     if (!panel) return;
     const editor = vscode.window.activeTextEditor;
+    currentFileDir = editor?.document.uri.scheme === 'file'
+        ? path.dirname(editor.document.uri.fsPath)
+        : undefined;
     panel.webview.postMessage({ type: 'render', content: editor ? editor.document.getText() : '' });
 }
 
@@ -57,12 +111,35 @@ function buildHtml(context: vscode.ExtensionContext, webview: vscode.Webview): s
     let html = fs.readFileSync(path.join(media, 'nmd.html'), 'utf8');
     const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' ${webview.cspSource}; style-src 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; connect-src ${webview.cspSource}; font-src ${webview.cspSource};`;
 
+    const injected = `<script>
+const vscodeApi = (typeof acquireVsCodeApi !== 'undefined') ? acquireVsCodeApi() : null;
+window.addEventListener('message', e => {
+    const msg = e.data;
+    if (!msg) return;
+    if (msg.type === 'render') renderMarkdown(msg.content);
+    if (msg.type === 'scroll') {
+        const max = document.body.scrollHeight - window.innerHeight;
+        if (max > 0) window.scrollTo({ top: msg.ratio * max, behavior: 'instant' });
+    }
+});
+if (vscodeApi) {
+    document.addEventListener('click', e => {
+        const a = e.target.closest('a');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (!href || href.startsWith('http://') || href.startsWith('https://') || href.startsWith('#')) return;
+        e.preventDefault();
+        vscodeApi.postMessage({ type: 'openFile', path: href });
+    });
+}
+</script>`;
+
     html = html
         .replace('https://nmd-local/shiki.js', toUri('shiki.bundle.js'))
         .replace('https://nmd-local/onig.wasm', toUri('onig.wasm'))
         .replace('https://nmd-local/mermaid.js', toUri('mermaid.min.js'))
         .replace('<head>', `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`)
-        .replace('</body>', `<script>\nwindow.addEventListener('message', e => {\n    if (e.data && e.data.type === 'render') renderMarkdown(e.data.content);\n});\n</script>\n</body>`);
+        .replace('</body>', `${injected}\n</body>`);
 
     return html;
 }
