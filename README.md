@@ -6,6 +6,8 @@ A VS Code extension that renders Markdown with syntax highlighting, Mermaid diag
 
 - **Live preview** — updates on every keystroke (300 ms debounce in panel mode)
 - **Shiki syntax highlighting** — GitHub Dark theme, bundled (no CDN)
+- **Code block actions** — tagged blocks get a language header, copy button,
+  line numbers, and soft-wrap
 - **Mermaid diagrams** — fenced ` ```mermaid ``` ` blocks render inline
 - **Scroll sync** — editor scroll position mirrors to the preview panel
 - **Local link navigation** — clicking relative links opens the file in VS Code
@@ -39,10 +41,17 @@ acronyms:
 
 Any occurrence of `API` or `SLA` in the document body is wrapped in an `<abbr>` tag, producing an underlined tooltip on hover. Occurrences inside `<code>`, `<pre>`, or `<a>` are left untouched.
 
+## Code blocks
+
+Language-tagged fenced code blocks get a small header with the language name on
+the left and a `Copy` button on the right. Tagged blocks also show line numbers
+and soft-wrap long lines. Untagged blocks still get the `Copy` button, but no
+language label or line numbers.
+
 ## Install from VSIX
 
 ```sh
-code --install-extension nmd-0.0.2.vsix
+code --install-extension nmd-0.2.0.vsix
 ```
 
 ## Development
