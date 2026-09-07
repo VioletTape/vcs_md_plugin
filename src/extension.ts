@@ -5,18 +5,29 @@ import * as fs from 'fs';
 let panel: vscode.WebviewPanel | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let currentFileDir: string | undefined;
+let panelMediaRoot: vscode.Uri | undefined;
 
 class NmdEditorProvider implements vscode.CustomTextEditorProvider {
     constructor(private readonly context: vscode.ExtensionContext) {}
 
     resolveCustomTextEditor(document: vscode.TextDocument, webviewPanel: vscode.WebviewPanel): void {
+        const documentDir = document.uri.scheme === 'file'
+            ? vscode.Uri.file(path.dirname(document.uri.fsPath))
+            : undefined;
         webviewPanel.webview.options = {
             enableScripts: true,
-            localResourceRoots: [vscode.Uri.file(path.join(this.context.extensionPath, 'media'))],
+            localResourceRoots: [
+                vscode.Uri.file(path.join(this.context.extensionPath, 'media')),
+                ...(documentDir ? [documentDir] : []),
+            ],
         };
         webviewPanel.webview.html = buildHtml(this.context, webviewPanel.webview);
 
-        const push = () => webviewPanel.webview.postMessage({ type: 'render', content: document.getText() });
+        const push = () => webviewPanel.webview.postMessage({
+            type: 'render',
+            content: document.getText(),
+            imageBase: documentDir && webviewPanel.webview.asWebviewUri(documentDir).toString() + '/',
+        });
         push();
 
         const sub = vscode.workspace.onDidChangeTextDocument(e => { if (e.document === document) push(); });
@@ -81,8 +92,9 @@ function toggle(context: vscode.ExtensionContext) {
             retainContextWhenHidden: true,
         }
     );
+    panelMediaRoot = vscode.Uri.file(path.join(context.extensionPath, 'media'));
     panel.webview.html = buildHtml(context, panel.webview);
-    panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
+    panel.onDidDispose(() => { panel = undefined; panelMediaRoot = undefined; }, null, context.subscriptions);
 
     panel.webview.onDidReceiveMessage(msg => {
         if (msg.type !== 'openFile' || !currentFileDir) return;
@@ -101,7 +113,20 @@ function pushContent() {
     currentFileDir = editor?.document.uri.scheme === 'file'
         ? path.dirname(editor.document.uri.fsPath)
         : undefined;
-    panel.webview.postMessage({ type: 'render', content: editor ? editor.document.getText() : '' });
+    panel.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [
+            ...(panelMediaRoot ? [panelMediaRoot] : []),
+            ...(currentFileDir ? [vscode.Uri.file(currentFileDir)] : []),
+        ],
+    };
+    panel.webview.postMessage({
+        type: 'render',
+        content: editor ? editor.document.getText() : '',
+        imageBase: currentFileDir
+            ? panel.webview.asWebviewUri(vscode.Uri.file(currentFileDir)).toString() + '/'
+            : undefined,
+    });
 }
 
 function buildHtml(context: vscode.ExtensionContext, webview: vscode.Webview): string {
@@ -116,7 +141,10 @@ const vscodeApi = (typeof acquireVsCodeApi !== 'undefined') ? acquireVsCodeApi()
 window.addEventListener('message', e => {
     const msg = e.data;
     if (!msg) return;
-    if (msg.type === 'render') renderMarkdown(msg.content);
+    if (msg.type === 'render') {
+        window.__nmdImageBase = msg.imageBase;
+        renderMarkdown(msg.content);
+    }
     if (msg.type === 'scroll') {
         const max = document.body.scrollHeight - window.innerHeight;
         if (max > 0) window.scrollTo({ top: msg.ratio * max, behavior: 'instant' });

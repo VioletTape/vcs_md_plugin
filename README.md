@@ -51,7 +51,7 @@ language label or line numbers.
 ## Install from VSIX
 
 ```sh
-code --install-extension nmd-0.2.0.vsix
+code --install-extension nmd-0.2.1.vsix
 ```
 
 ## Development
