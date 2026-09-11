@@ -13,6 +13,7 @@ A VS Code extension that renders Markdown with syntax highlighting, Mermaid diag
 - **Local link navigation** — clicking relative links opens the file in VS Code
 - **Front-matter acronyms** — define acronyms in YAML front matter; matching text is wrapped in `<abbr>` with tooltip
 - **Warning blockquotes** — blockquote lines starting with `!` render with a red left border
+- **Zoom & scaling** — `Ctrl + MouseWheel` or trackpad pinch zooms preview content smoothly with cursor anchoring; `Ctrl+0` resets, `Ctrl+=`/`Ctrl+-` adjusts zoom
 
 ## Usage
 
@@ -48,10 +49,26 @@ the left and a `Copy` button on the right. Tagged blocks also show line numbers
 and soft-wrap long lines. Untagged blocks still get the `Copy` button, but no
 language label or line numbers.
 
+## Zoom & scaling
+
+The preview supports independent zooming without affecting VS Code's overall UI zoom:
+
+| Action | Input |
+|---|---|
+| Zoom in / out | `Ctrl + MouseWheel` (or trackpad pinch) |
+| Step zoom in | `Ctrl + =` / `Ctrl + +` |
+| Step zoom out | `Ctrl + -` |
+| Reset to 100% | `Ctrl + 0` |
+
+- **Cursor anchoring** — content under the mouse cursor remains stationary while zooming.
+- **Visual badge** — a floating percentage pill appears in the top-right corner and fades out automatically.
+- **Session persistence** — the zoom factor is remembered across tabs and restored across VS Code restarts.
+- **Bounds** — clamped between 30% and 500%.
+
 ## Install from VSIX
 
 ```sh
-code --install-extension nmd-0.2.1.vsix
+code --install-extension nmd-0.2.2.vsix
 ```
 
 ## Development

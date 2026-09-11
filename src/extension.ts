@@ -34,10 +34,13 @@ class NmdEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel.onDidDispose(() => sub.dispose());
 
         webviewPanel.webview.onDidReceiveMessage(msg => {
-            if (msg.type !== 'openFile') return;
-            const dir = path.dirname(document.uri.fsPath);
-            const resolved = path.isAbsolute(msg.path) ? msg.path : path.resolve(dir, msg.path);
-            vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
+            if (msg.type === 'openFile') {
+                const dir = path.dirname(document.uri.fsPath);
+                const resolved = path.isAbsolute(msg.path) ? msg.path : path.resolve(dir, msg.path);
+                vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
+            } else if (msg.type === 'zoom' && typeof msg.zoom === 'number') {
+                this.context.globalState.update('previewZoom', msg.zoom);
+            }
         });
     }
 }
@@ -97,11 +100,15 @@ function toggle(context: vscode.ExtensionContext) {
     panel.onDidDispose(() => { panel = undefined; panelMediaRoot = undefined; }, null, context.subscriptions);
 
     panel.webview.onDidReceiveMessage(msg => {
-        if (msg.type !== 'openFile' || !currentFileDir) return;
-        const resolved = path.isAbsolute(msg.path)
-            ? msg.path
-            : path.resolve(currentFileDir, msg.path);
-        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
+        if (msg.type === 'openFile') {
+            if (!currentFileDir) return;
+            const resolved = path.isAbsolute(msg.path)
+                ? msg.path
+                : path.resolve(currentFileDir, msg.path);
+            vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
+        } else if (msg.type === 'zoom' && typeof msg.zoom === 'number') {
+            context.globalState.update('previewZoom', msg.zoom);
+        }
     }, null, context.subscriptions);
 
     pushContent();
@@ -135,6 +142,7 @@ function buildHtml(context: vscode.ExtensionContext, webview: vscode.Webview): s
 
     let html = fs.readFileSync(path.join(media, 'nmd.html'), 'utf8');
     const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' ${webview.cspSource}; style-src 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; connect-src ${webview.cspSource}; font-src ${webview.cspSource};`;
+    const initialZoom = context.globalState.get<number>('previewZoom', 1.0);
 
     const injected = `<script>
 const vscodeApi = (typeof acquireVsCodeApi !== 'undefined') ? acquireVsCodeApi() : null;
@@ -146,7 +154,7 @@ window.addEventListener('message', e => {
         renderMarkdown(msg.content);
     }
     if (msg.type === 'scroll') {
-        const max = document.body.scrollHeight - window.innerHeight;
+        const max = document.documentElement.scrollHeight - window.innerHeight;
         if (max > 0) window.scrollTo({ top: msg.ratio * max, behavior: 'instant' });
     }
 });
@@ -160,6 +168,84 @@ if (vscodeApi) {
         vscodeApi.postMessage({ type: 'openFile', path: href });
     });
 }
+(function() {
+    let currentZoom = ${JSON.stringify(initialZoom)};
+    const savedState = vscodeApi ? vscodeApi.getState() : null;
+    if (savedState && typeof savedState.zoom === 'number') {
+        currentZoom = savedState.zoom;
+    }
+    if (currentZoom !== 1.0) {
+        document.body.style.zoom = currentZoom;
+    }
+
+    const badge = document.createElement('div');
+    badge.className = 'nmd-zoom-badge';
+    badge.style.cssText = 'position:fixed;top:16px;right:16px;z-index:99999;padding:6px 12px;background:rgba(22,27,34,0.92);border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:600;pointer-events:none;opacity:0;transition:opacity 0.15s ease-out;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+    document.documentElement.appendChild(badge);
+
+    let badgeTimer = null;
+    function showBadge(text) {
+        badge.textContent = text;
+        badge.style.opacity = '1';
+        clearTimeout(badgeTimer);
+        badgeTimer = setTimeout(() => {
+            badge.style.opacity = '0';
+        }, 900);
+    }
+
+    function updateZoom(newZoom, anchorX, anchorY) {
+        const clamped = Math.min(Math.max(newZoom, 0.3), 5.0);
+        const rounded = Math.round(clamped * 1000) / 1000;
+        if (Math.abs(rounded - currentZoom) < 0.001) return;
+
+        const oldZoom = currentZoom;
+        currentZoom = rounded;
+
+        const scrollX = window.scrollX;
+        const scrollY = window.scrollY;
+
+        document.body.style.zoom = currentZoom;
+
+        if (typeof anchorX === 'number' && typeof anchorY === 'number') {
+            const newScrollX = (scrollX + anchorX) * (currentZoom / oldZoom) - anchorX;
+            const newScrollY = (scrollY + anchorY) * (currentZoom / oldZoom) - anchorY;
+            window.scrollTo(Math.max(0, newScrollX), Math.max(0, newScrollY));
+        }
+
+        showBadge(Math.round(currentZoom * 100) + '%');
+
+        if (vscodeApi) {
+            vscodeApi.setState({ ...vscodeApi.getState(), zoom: currentZoom });
+            vscodeApi.postMessage({ type: 'zoom', zoom: currentZoom });
+        }
+    }
+
+    window.addEventListener('wheel', (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+
+        let delta = -e.deltaY;
+        if (e.deltaMode === 1) delta *= 33;
+        else if (e.deltaMode === 2) delta *= 100;
+
+        const change = Math.max(Math.min(delta * 0.0015, 0.25), -0.25);
+        updateZoom(currentZoom * (1 + change), e.clientX, e.clientY);
+    }, { passive: false });
+
+    window.addEventListener('keydown', (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        if (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0') {
+            e.preventDefault();
+            updateZoom(1.0, window.innerWidth / 2, window.innerHeight / 2);
+        } else if (e.key === '=' || e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd') {
+            e.preventDefault();
+            updateZoom(currentZoom * 1.15, window.innerWidth / 2, window.innerHeight / 2);
+        } else if (e.key === '-' || e.key === '_' || e.code === 'Minus' || e.code === 'NumpadSubtract') {
+            e.preventDefault();
+            updateZoom(currentZoom / 1.15, window.innerWidth / 2, window.innerHeight / 2);
+        }
+    });
+})();
 </script>`;
 
     html = html
