@@ -9,6 +9,7 @@ A VS Code extension that renders Markdown with syntax highlighting, Mermaid diag
 - **Code block actions** — tagged blocks get a language header, copy button,
   line numbers, and soft-wrap
 - **Mermaid diagrams** — fenced ` ```mermaid ``` ` blocks render inline
+- **100% Offline KaTeX Math** — inline (`$\rightarrow$`, `$E = mc^2$`), block (`$$...$$`), and GitLab-style (```math) math with bundled vector fonts and zero network requests
 - **Scroll sync** — editor scroll position mirrors to the preview panel
 - **Local link navigation** — clicking relative links opens the file in VS Code
 - **Front-matter acronyms** — define acronyms in YAML front matter; matching text is wrapped in `<abbr>` with tooltip
@@ -49,6 +50,26 @@ the left and a `Copy` button on the right. Tagged blocks also show line numbers
 and soft-wrap long lines. Untagged blocks still get the `Copy` button, but no
 language label or line numbers.
 
+## Offline LaTeX / KaTeX Math
+
+NMD embeds the complete KaTeX engine along with all math vector fonts offline:
+
+- **Inline Math:** `$E = mc^2$` or `$\rightarrow$`
+- **Display Blocks:**
+  ```markdown
+  $$
+  \int_{0}^{\infty} e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+  $$
+  ```
+- **GitLab Fenced Blocks:**
+  ````markdown
+  ```math
+  \sum_{i=1}^n i = \frac{n(n+1)}{2}
+  ```
+  ````
+
+Currency expressions like `$50 bucks and $100` and inline code snippets like `` `$x$` `` remain literal text and are never falsely parsed as math.
+
 ## Zoom & scaling
 
 The preview supports independent zooming without affecting VS Code's overall UI zoom:
@@ -68,7 +89,7 @@ The preview supports independent zooming without affecting VS Code's overall UI 
 ## Install from VSIX
 
 ```sh
-code --install-extension nmd-0.2.2.vsix
+code --install-extension nmd-1.1.0.vsix
 ```
 
 ## Development
@@ -85,3 +106,4 @@ Press `F5` in VS Code to launch the Extension Development Host.
 - [marked](https://github.com/markedjs/marked) v15.0.12 (MIT)
 - [Shiki](https://github.com/shikijs/shiki) (MIT)
 - [Mermaid](https://github.com/mermaid-js/mermaid) (MIT)
+- [KaTeX](https://github.com/KaTeX/KaTeX) (MIT)

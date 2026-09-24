@@ -3,7 +3,7 @@
   "name": "nmd",
   "displayName": "NMD - Markdown Preview",
   "description": "Live markdown preview with Shiki syntax highlighting",
-  "version": "0.2.2",
+  "version": "1.1.0",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -41,7 +41,8 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --allow-missing-repository"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

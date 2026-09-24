@@ -1,4 +1,6 @@
 .vscode/**
+.claude/**
+tests/**
 node_modules/**
 out/**/*.map
 src/**

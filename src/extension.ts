@@ -141,7 +141,7 @@ function buildHtml(context: vscode.ExtensionContext, webview: vscode.Webview): s
     const toUri = (file: string) => webview.asWebviewUri(vscode.Uri.file(path.join(media, file))).toString();
 
     let html = fs.readFileSync(path.join(media, 'nmd.html'), 'utf8');
-    const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' ${webview.cspSource}; style-src 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; connect-src ${webview.cspSource}; font-src ${webview.cspSource};`;
+    const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' ${webview.cspSource}; style-src 'unsafe-inline' ${webview.cspSource}; img-src ${webview.cspSource} data: blob:; connect-src ${webview.cspSource}; font-src ${webview.cspSource};`;
     const initialZoom = context.globalState.get<number>('previewZoom', 1.0);
 
     const injected = `<script>
@@ -252,6 +252,8 @@ if (vscodeApi) {
         .replace('https://nmd-local/shiki.js', toUri('shiki.bundle.js'))
         .replace('https://nmd-local/onig.wasm', toUri('onig.wasm'))
         .replace('https://nmd-local/mermaid.js', toUri('mermaid.min.js'))
+        .replace('https://nmd-local/katex.css', toUri('katex.min.css'))
+        .replace('https://nmd-local/katex.js', toUri('katex.bundle.js'))
         .replace('<head>', `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`)
         .replace('</body>', `${injected}\n</body>`);
 
